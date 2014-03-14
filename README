@@ -1,0 +1,52 @@
+sre-random v0.1
+
+--- Overview ---
+
+sre-random is a customizable random number generation library, highly optimized
+for both floating point and integer random number generation, with particular
+attention to execution speed and configurable floating point precision.
+
+Implemented as a C++ class, any kind of random number generator that can provide
+32 random bits at a time can be used in a derived class, taking advantage of the
+high degree of optimization in the random number generation functions in the base
+class.
+
+A high-performance default random number generator, based on the CMWC
+(Complementary-multiply-with-carry) algorithm, is provided.
+
+Also provided is a program that tests the execution speed performance and
+statistical properties of the random number generator.
+
+Documentation of the public member functions is provided in the header file.
+
+--- Installation ----
+
+Edit Makefile.conf to change the configuration (such as building of a static or
+shared library).
+
+Run 'make' or 'make library' to build the library. Run 'make test' to build the
+test program, which requires the libfgen library to be installed (it used for
+comparison purposes).
+
+Run '(sudo) make install' to install the library and header file.
+
+The test-random program can be used to test the performance and statistical properties
+of the standard provided random number generator. The code can be modified to test
+an alternative random number generator derived from the base class (although it would
+probably be hard to beat the performance of the CMWC RNG).
+
+--- License ---
+
+Copyright (c) 2014 Harm Hanemaaijer <fgenfb@yahoo.com>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
