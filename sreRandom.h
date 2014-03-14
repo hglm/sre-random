@@ -97,8 +97,22 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 //     two less than or equal to 2 ^ 16.
 // unsigned int RandomIntPowerOfTwoRepeat()
 //     Repeat random integer function with the last power of two range previously
-//     used in any of the RandomInt functions above, or the specialized functions
+//     used in any of the RandomInt functions above, or the specialized function
 //     below. This the fastest of the random integer functions.
+// void RandomIntPowerOfTwoPrepareForRepeat(unsigned int n)
+//     Prepare for power of two range so that it is cached, but do not return any
+//     random number yet.
+// unsigned int RandomIntGeneralRepeat()
+//     Repeat random integer function with the general range previously set
+//     with RandomIntGeneralPrepareForRepeat().
+// void RandomIntGeneralPrepareForRepeat(unsigned int n)
+//     Prepare for general range (either a power of two or not) so that it is cached,
+//     but do not return any random number yet. Only RandomIntGeneralRepeat() will use
+//     the cached information.
+// int CalculateLog2(int n)
+//     Efficiently calculate floor(log2(n)), valid for n >= 1.
+// int CalculatePowerOfTwoShift(int n)
+//     Efficiently calculate log2(n), returns - 1 if n is not a power of two.
 //
 // Floating point core functions:
 //
@@ -170,14 +184,16 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 //
 // unsigned int RandomIntEmpirical(unsigned int n)
 //     RandomInt() that will use the empirical strategy for ranges that are not
-//     a power of two (see below). Detects powers of two.
+//     a power of two (see below). Detects powers of two. Only available when
+//     the empirical strategy is included.
 // unsigned int RandomIntRemainder(unsigned int n)
 //     RandomInt() that will use the remainder strategy for ranges that are not
-//     a power of two. Detects powers of two.
+//     a power of two. Detects powers of two. Only available if the emperical
+//     strategy is included.
 // unsigned int RandomIntRemainderDirect(unsigned int n)
 //     Trivial RandomInt() variant that directly uses the remainder
-//     after division of a 32-bit random integer by the range. This is only
-//     RandomInt() version that does not cache a power of two range.
+//     after division of a 32-bit random integer by the range. This is one of
+//     the few RandomInt() version that does not cache a power of two range.
 //
 // sreCMWCRNG::sreCMWCRNG()
 //     Constructor for the default complement-multiply-with-carry RNG
@@ -213,7 +229,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // more so when the number of random bits of the remainder input is not
 // sufficiently higher than the number of bits required for the random
 // integer range. Integer divide/ remainder is also notoriously slow even
-// on modern CPUs.
+// on modern CPUs. It is disabled by default.
 
 // The following defines the strategy used by default by the general RandomInt(n)
 // family of functions. One line must be uncommented.
@@ -462,6 +478,7 @@ private :
     unsigned int GetBitsNeededLookupTableMax65536(unsigned int n);
 #endif
 #ifdef SRE_RANDOM_CALCULATE_LOG2
+public :
     // Calculate floor(log2(n))). For a power of two, this is equivalent to the
     // number of bits needed to represent the range 0 to n - 1. For a non-power-of-two,
     // the return value is one less than the number of bits needed to represent
@@ -490,6 +507,7 @@ private :
         shift += bits >> 1;
         return shift;
     }
+private :
     // Calculate number of bits needed for an integer range of n (log2(n - 1) + 1).
     inline unsigned int CalculateBitsNeeded(unsigned int n) const {
         unsigned int shift = CalculateLog2(n);
@@ -564,47 +582,6 @@ private :
         VALIDATE_BITS_NEEDED(n, shift);
 	return shift;
     }
-#if 0
-    // Calculate number of bits needed (log2(n - 1) + 1) algebraically instead of
-    // using a lookup table. Despite the fair number of terms, the resulting
-    // code surprisingly efficient on most CPUs as the compiler is able to
-    // significantly optimize both complexity and instruction scheduling; the lack
-    // of branches is critical.
-    // Old, non-optimal implementation (disabled).
-    inline unsigned int CalculateBitsNeeded(unsigned int n) const {
-        // Calculate which bytes of n holds bits.
-        unsigned char byte3_flag = (((((n >> 24) & 0xFF) + 0xFF) & 0x100) >> 8);
-        unsigned char nu_bytes = byte3_flag * 4;
-        unsigned char mask_bit = byte3_flag ^ 1;
-        unsigned char byte2_flag = (((((n >> 16) & 0xFF) + 0xFF) & 0x100) >> 8);
-        nu_bytes += (byte2_flag & mask_bit) * 3;
-        mask_bit &= byte2_flag ^ 1;
-        unsigned char byte1_flag = (((((n >> 8) & 0xFF) + 0xFF) & 0x100) >> 8);
-        nu_bytes += (byte1_flag & mask_bit) * 2;
-        mask_bit &= byte1_flag ^ 1;
-        // The lowest byte must be non-zero if mask_bit is 1.
-        nu_bytes += mask_bit;
-//        unsigned char byte0_flag = ((((n & 0xFF) + 0xFF) & 0x100) >> 8);
-//        byte_count += byte0_flag & mask_bit;
-        unsigned int shift = nu_bytes * 8;
-        unsigned char highest_byte = n >> (shift - 8);
-        // Assign four to nibble if bits 4-7 are non-zero, zero otherwise.
-        unsigned char nibble = ((((highest_byte >> 4) + 0xF) & 0x10) >> 2);
-        // Assign two to pair if bits 2-3 within the highest nibble are non-zero.
-        unsigned char pair = ((((highest_byte >> nibble) + 0xC) & 0x10) >> 3);
-        // Assign one of the highest bit witin the highest-order bit pair is non-zero.
-        unsigned char bit = (highest_byte >> (nibble + pair + 1));
-//        printf("Bit offsets: byte %d, nibble %d, pair %d, bit %d\n",
-//            shift, nibble, pair, bit);
-        // If bit is 1, subtract 1, otherwise the lower order bit within the pair
-        // must be 1, so subtract 2.
-        shift -= (4 - nibble) + (2 - pair) + (2 - bit);
-         // Additionally, if n is not a power of two, one more bit is needed.
-        shift += (n + ((1 << shift) - 1)) >> (shift + 1);
-        VALIDATE_BITS_NEEDED(n, shift);
-	return shift;
-    }
-#endif
 #endif
 
     // Helper functions.
@@ -889,6 +866,13 @@ public :
             return;
         int shift = CalculateBitsNeeded(n);
         SetLastGeneralRangeData(n, shift);
+    }
+    // Efficiently calculate log2(n), returns - 1 if n is not a power of two.
+    inline int CalculatePowerOfTwoShift(unsigned int n) {
+	unsigned int shift = CalculateLog2(n);
+	if (((unsigned int)1 << shift) == n)
+		return shift;
+	return - 1;
     }
 
     // Floating point functions (all inline).
