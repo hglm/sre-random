@@ -140,8 +140,10 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 //     Return a random double from 0 to range (exclusive) with very high precision.
 //     A higher degree of precision can be achieved when the range is large
 //     (much larger than 1.0, so that the return value can have higher effective
-//     precision). This functions is relatively slow because it uses natural
-//     exponent and logarithm calculations.
+//     precision). This functions can be slower because it uses natural
+//     exponent and logarithm calculations, but on PC-class CPUs the difference
+//     is not large (helped by inlining and thereby allowing the compiler to
+//     optimize scheduling by mixing integer and floating point instructions).
 // double RandomDoubleLP(float range)
 //     Return a random double from 0 to range (exclusive) with low precision.
 //     A precision of 32 bits is applied within the range.
@@ -913,9 +915,9 @@ public :
     // precision).
     double RandomDoubleHP(double range) {
         if (range <= 1.00001d)
-            // When range <= 1.0, the standard high-precision function is already
+            // When range <= 1.0, the standard function is already
             // optimal.
-            return RandomDoubleHP(range);
+            return RandomDouble(range);
         const double high_value = DBL_MAX;
         // Use the identity exp(x + y) = exp(x) * exp(y).
         // Scale the 32 bit random integers r0 and r1 so that

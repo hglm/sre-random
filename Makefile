@@ -79,12 +79,12 @@ install_static : $(LIBRARY_OBJECT)
 
 test : test-random
 
-test-random :  $(LIBRARY_DEPENDENCY)
+test-random :  $(LIBRARY_DEPENDENCY) test-random.cpp sreRandom.h
 	g++ $(CFLAGS) test-random.cpp -o test-random -lm -lfgen $(TEST_PROGRAM_LFLAGS)
 
 clean :
 	rm -f $(LIBRARY_MODULE_OBJECTS)
-	rm -f test-progra
+	rm -f test-program
 	rm -f $(LIBRARY_NAME).so.$(VERSION)
 	rm -f $(LIBRARY_NAME).a
 	rm -f $(LIBRARY_NAME)_dbg.a

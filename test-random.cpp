@@ -52,7 +52,7 @@ enum {
 	MASK_SRE_STATE_1 = 4,
 };
 
-#define NU_TESTS 8
+#define NU_TESTS 13
 
 enum {
 	TEST_RANDOM_INT_POWER_OF_TWO = 0,
@@ -63,6 +63,11 @@ enum {
         TEST_RANDOM_INT_GENERAL = 5,
         TEST_RANDOM_INT_GENERAL_EMPIRICAL = 6,
         TEST_RANDOM_INT_GENERAL_REMAINDER = 7,
+        TEST_RANDOM_FLOAT = 8,
+	TEST_RANDOM_FLOAT_LP = 9, 
+	TEST_RANDOM_DOUBLE = 10,
+	TEST_RANDOM_DOUBLE_LP = 11,
+	TEST_RANDOM_DOUBLE_HP = 12
 };
 
 enum {
@@ -73,18 +78,26 @@ enum {
 	MASK_LARGE = 16,
         MASK_GENERAL = 32,
         MASK_GENERAL_EMPIRICAL = 64,
-	MASK_GENERAL_REMAINDER = 128
+	MASK_GENERAL_REMAINDER = 128,
+	MASK_FLOAT = 256,
+	MASK_FLOAT_LP = 512,
+	MASK_DOUBLE = 1024,
+	MASK_DOUBLE_LP = 2048,
+	MASK_DOUBLE_HP = 4096
 };
 
 static const int rng_test_mask[NU_RNGS] = {
 	MASK_RANDOM_INT_POWER_OF_TWO | MASK_RANDOM_POWER_OF_TWO | MASK_SMALL |
         MASK_MEDIUM | MASK_LARGE | MASK_GENERAL_EMPIRICAL | MASK_GENERAL |
-        MASK_GENERAL_REMAINDER,
+        MASK_GENERAL_REMAINDER | MASK_FLOAT | MASK_FLOAT_LP |
+	MASK_DOUBLE | MASK_DOUBLE_LP | MASK_DOUBLE_HP,
 	MASK_RANDOM_INT_POWER_OF_TWO | MASK_SMALL | MASK_MEDIUM |
-	MASK_LARGE | MASK_GENERAL,
+	MASK_LARGE | MASK_GENERAL | MASK_FLOAT | MASK_FLOAT_LP |
+	MASK_DOUBLE | MASK_DOUBLE_LP | MASK_DOUBLE_HP,
 	MASK_RANDOM_INT_POWER_OF_TWO | MASK_RANDOM_POWER_OF_TWO | MASK_SMALL |
         MASK_MEDIUM | MASK_LARGE | MASK_GENERAL_EMPIRICAL | MASK_GENERAL |
-        MASK_GENERAL_REMAINDER,
+        MASK_GENERAL_REMAINDER | MASK_FLOAT | MASK_FLOAT_LP |
+	MASK_DOUBLE | MASK_DOUBLE_LP | MASK_DOUBLE_HP,
 };
 
 static int rng_mask, test_mask;
@@ -109,6 +122,11 @@ static const char *test_str[NU_RNGS][NU_TESTS] = {
 	"sreRNG::RandomInt(",
 	"sreRNG::RandomIntEmpirical(",
 	"sreRNG::RandomIntRemainder(",
+        "sreRNG::RandomFloatHP(",
+	"sreRNG::RandomFloat(",
+        "sreRNG::RandomDouble(",
+        "sreRNG::RandomDoubleLP(",
+        "sreRNG::RandomDoubleHP(",
 	},
 	{
 	"fgen_random_n(rng, ",
@@ -119,6 +137,11 @@ static const char *test_str[NU_RNGS][NU_TESTS] = {
 	"fgen_random_n(rng, ",
         "Invalid(rng, ",
 	"Invalid(rng, ",
+        "fgen_random_f(rng, ",
+        "fgen_random_f_low_precision(rng, ",
+        "fgen_random_d(rng, ",
+        "fgen_random_d_low_precision(rng, ",
+        "fgen_random_d_high_precision(rng, ",
 	},
 	{
 	"sreRNG::RandomInt(",
@@ -129,6 +152,11 @@ static const char *test_str[NU_RNGS][NU_TESTS] = {
 	"sreRNG::RandomInt(",
 	"sreRNG::RandomIntEmpirical(",
 	"sreRNG::RandomIntRemainder(",
+        "sreRNG::RandomFloatHP(",
+	"sreRNG::RandomFloat(",
+        "sreRNG::RandomDouble(",
+        "sreRNG::RandomDoubleLP(",
+        "sreRNG::RandomDoubleHP(",
 	},
 };
 
@@ -169,6 +197,81 @@ void PerformTestRun(int rng_index, int test_index, int n, int runs) {
 				count[r]++;
 			}
 	}
+}
+
+float PerformTestRunFloat(int rng_index, int test_index, float range, int runs) {
+	float sum = 0;
+	if (rng_index == RNG_FGEN) {
+		if (test_index == TEST_RANDOM_FLOAT)
+			for (int i = 0; i < runs; i++) {
+				float r = fgen_random_f(fgen_rng, range);
+				sum += r;
+			}
+		else if (test_index == TEST_RANDOM_FLOAT_LP)
+			for (int i = 0; i < runs; i++) {
+				float r = fgen_random_f_low_precision(fgen_rng, range);
+				sum += r;
+			}
+	}
+	else {
+		sreRNG *rng = sre_rng[rng_index];
+		if (test_index == TEST_RANDOM_FLOAT)
+			for (int i = 0; i < runs; i++) {
+				// fgen_random_f is equivalent to RandomFloatHP.
+				float r = rng->RandomFloatHP(range);
+				sum += r;
+			}
+		else if (test_index == TEST_RANDOM_FLOAT_LP)
+			for (int i = 0; i < runs; i++) {
+				// fgen_random_f_low_precision is equivalent to RandomFloat.
+				float r = rng->RandomFloat(range);
+				sum += r;
+			}
+	}
+	volatile_global = sum;
+	return sum;
+}
+
+double PerformTestRunDouble(int rng_index, int test_index, double range, int runs) {
+	double sum = 0;
+	if (rng_index == RNG_FGEN) {
+		if (test_index == TEST_RANDOM_DOUBLE)
+			for (int i = 0; i < runs; i++) {
+				double r = fgen_random_d(fgen_rng, range);
+				sum += r;
+			}
+		else if (test_index == TEST_RANDOM_DOUBLE_LP)
+			for (int i = 0; i < runs; i++) {
+				double r = fgen_random_d_low_precision(fgen_rng, range);
+				sum += r;
+			}
+		else if (test_index == TEST_RANDOM_DOUBLE_HP)
+			for (int i = 0; i < runs; i++) {
+				double r = fgen_random_d_high_precision(fgen_rng, range);
+				sum += r;
+			}
+	}
+	else {
+		sreRNG *rng = sre_rng[rng_index];
+		if (test_index == TEST_RANDOM_DOUBLE)
+			for (int i = 0; i < runs; i++) {
+				// fgen_random_d is equivalent to RandomDouble,
+				double r = rng->RandomDouble(range);
+				sum += r;
+			}
+		else if (test_index == TEST_RANDOM_DOUBLE_LP)
+			for (int i = 0; i < runs; i++) {
+				double r = rng->RandomDoubleLP(range);
+				sum += r;
+			}
+		else if (test_index == TEST_RANDOM_DOUBLE_HP)
+			for (int i = 0; i < runs; i++) {
+				double r = rng->RandomDoubleHP(range);
+				sum += r;
+			}
+	}
+	volatile_global = sum;
+	return sum;
 }
 
 static void TestRandomInt(int test_index, unsigned int n, int rng_index) {
@@ -253,6 +356,61 @@ static void ReportAverageOpsPerSecond(int test_index, int mask, int nu_tests) {
 		}
 }
 
+static void TestRandomFloat(int test_index, float range, int rng_index) {
+	int runs;
+	runs = 10000000;
+	// Warm up.
+	PerformTestRunFloat(rng_index, test_index, range, runs / 8);
+	// Perform test.
+	double start_time = GetCurrentTime();
+	float avg = PerformTestRunFloat(rng_index, test_index, range, runs);
+	double end_time = GetCurrentTime();
+	double ops_per_sec = runs / (end_time - start_time);
+	double sd = 0;
+	double sd_expected = 0;
+        avg /= runs;
+	float avg_expected = range / 2;
+	if (!quiet)
+		printf("%s%f) (%.2lfM ops/sec): avg = %lf (%lf expected)\n",
+			test_str[rng_index][test_index], range,
+			ops_per_sec / 1000000.0, avg, avg_expected);
+	if ((fabs(sd - sd_expected) / sd_expected) > 0.01) {
+		printf("Actual SD for range = %f deviates more than 1%% from expected SD.\n"
+			"Average %lf vs %lf.\n", range, avg, avg_expected);
+	}
+	fflush(stdout);
+	total_M_ops_per_sec[rng_index] += ops_per_sec / 1000000.0;
+}
+
+static void TestRandomDouble(int test_index, double range, int rng_index) {
+	int runs;
+	runs = 10000000;
+        if (test_index == TEST_RANDOM_DOUBLE_HP)
+            runs /= 2;
+	// Warm up.
+	PerformTestRunDouble(rng_index, test_index, range, runs / 8);
+	// Perform test.
+	double start_time = GetCurrentTime();
+	double avg = PerformTestRunDouble(rng_index, test_index, range, runs);
+	double end_time = GetCurrentTime();
+	double ops_per_sec = runs / (end_time - start_time);
+	double sd = 0;
+	double sd_expected = 0;
+        avg /= runs;
+	double avg_expected = range / 2;
+	if (!quiet)
+		printf("%s%lf) (%.2lfM ops/sec): avg = %lf (%lf expected)\n",
+			test_str[rng_index][test_index], range,
+			ops_per_sec / 1000000.0, avg, avg_expected);
+	if ((fabs(sd - sd_expected) / sd_expected) > 0.01) {
+		printf("Actual SD for range = %lf deviates more than 1%% from expected SD.\n"
+			"Average %lf vs %lf.\n", range, avg, avg_expected);
+	}
+	fflush(stdout);
+	total_M_ops_per_sec[rng_index] += ops_per_sec / 1000000.0;
+}
+
+
 // Test that include both power of two and general exponentially increasing
 // values. Can be called as different tests.
 
@@ -311,6 +469,16 @@ int main(int argc, char *argv[]) {
 			test_mask |= MASK_GENERAL;
 		else if (strcmp(argv[argi], "--remainder") == 0)
 			test_mask |= MASK_GENERAL_REMAINDER;
+		else if (strcmp(argv[argi], "--float") == 0)
+			test_mask |= MASK_FLOAT;
+		else if (strcmp(argv[argi], "--float_lp") == 0)
+			test_mask |= MASK_FLOAT_LP;
+		else if (strcmp(argv[argi], "--double") == 0)
+			test_mask |= MASK_DOUBLE;
+		else if (strcmp(argv[argi], "--double_lp") == 0)
+			test_mask |= MASK_DOUBLE_LP;
+		else if (strcmp(argv[argi], "--double_hp") == 0)
+			test_mask |= MASK_DOUBLE_HP;
 		else if (strcmp(argv[argi], "--quiet") == 0)
 			quiet = true;
 		else {
@@ -327,7 +495,9 @@ int main(int argc, char *argv[]) {
 		// Run all tests by default.
 		test_mask = MASK_RANDOM_INT_POWER_OF_TWO | MASK_SMALL | MASK_MEDIUM |
 			MASK_LARGE | MASK_RANDOM_POWER_OF_TWO |
-                        MASK_GENERAL_EMPIRICAL | MASK_GENERAL | MASK_GENERAL_REMAINDER;
+                        MASK_GENERAL_EMPIRICAL | MASK_GENERAL | MASK_GENERAL_REMAINDER |
+                        MASK_FLOAT | MASK_FLOAT_LP | MASK_DOUBLE | MASK_DOUBLE_LP |
+			MASK_DOUBLE_HP;
 
 	if (rng_mask & MASK_SRE)
 		sre_rng[RNG_SRE] = new sreCMWCRNG();
@@ -430,6 +600,91 @@ int main(int argc, char *argv[]) {
 #ifdef SRE_RANDOM_INT_INCLUDE_REMAINDER_STRATEGY
         TestGeneral(test_mask, rng_mask, TEST_RANDOM_INT_GENERAL_REMAINDER);
 #endif
+
+	for (int i = 0; i < NU_RNGS; i++)
+	        total_M_ops_per_sec[i] = 0;
+	if (test_mask & MASK_FLOAT) {
+	int n_count;
+		for (int j = 0; j < NU_RNGS; j++)
+			if (rng_mask & (1 << j)) {
+				n_count = 0;
+				for (int i = 0; i < 11; i++) {
+					TestRandomFloat(TEST_RANDOM_FLOAT,
+						powf(10.0f, i - 5), j);
+					n_count++;
+				}
+			}
+	printf("Float in ranges from 0.00001 to 100000.0 using RandomFloatHP(range):\n");
+	ReportAverageOpsPerSecond(TEST_RANDOM_FLOAT, rng_mask, n_count);
+	}
+
+	for (int i = 0; i < NU_RNGS; i++)
+	        total_M_ops_per_sec[i] = 0;
+	if (test_mask & MASK_FLOAT_LP) {
+	int n_count;
+		for (int j = 0; j < NU_RNGS; j++)
+			if (rng_mask & (1 << j)) {
+				n_count = 0;
+				for (int i = 0; i < 11; i++) {
+					TestRandomFloat(TEST_RANDOM_FLOAT_LP,
+						powf(10.0f, i - 5), j);
+					n_count++;
+				}
+			}
+	printf("Float in ranges from 0.00001 to 100000.0 using RandomFloat(range):\n");
+	ReportAverageOpsPerSecond(TEST_RANDOM_FLOAT_LP, rng_mask, n_count);
+	}
+
+	for (int i = 0; i < NU_RNGS; i++)
+	        total_M_ops_per_sec[i] = 0;
+	if (test_mask & MASK_DOUBLE) {
+	int n_count;
+		for (int j = 0; j < NU_RNGS; j++)
+			if (rng_mask & (1 << j)) {
+				n_count = 0;
+				for (int i = 0; i < 11; i++) {
+					TestRandomDouble(TEST_RANDOM_DOUBLE,
+						pow(10.0, i - 5), j);
+					n_count++;
+				}
+			}
+	printf("Double in ranges from 0.00001 to 100000.0 using RandomDouble(range):\n");
+	ReportAverageOpsPerSecond(TEST_RANDOM_DOUBLE, rng_mask, n_count);
+	}
+
+	for (int i = 0; i < NU_RNGS; i++)
+	        total_M_ops_per_sec[i] = 0;
+	if (test_mask & MASK_DOUBLE_LP) {
+	int n_count;
+		for (int j = 0; j < NU_RNGS; j++)
+			if (rng_mask & (1 << j)) {
+				n_count = 0;
+				for (int i = 0; i < 11; i++) {
+					TestRandomDouble(TEST_RANDOM_DOUBLE_LP,
+						pow(10.0, i - 5), j);
+					n_count++;
+				}
+			}
+	printf("Double in ranges from 0.00001 to 100000.0 using RandomDoubleLP(range):\n");
+	ReportAverageOpsPerSecond(TEST_RANDOM_DOUBLE_LP, rng_mask, n_count);
+	}
+
+	for (int i = 0; i < NU_RNGS; i++)
+	        total_M_ops_per_sec[i] = 0;
+	if (test_mask & MASK_DOUBLE_HP) {
+	int n_count;
+		for (int j = 0; j < NU_RNGS; j++)
+			if (rng_mask & (1 << j)) {
+				n_count = 0;
+				for (int i = 0; i < 11; i++) {
+					TestRandomDouble(TEST_RANDOM_DOUBLE_HP,
+						pow(10.0, i - 5), j);
+					n_count++;
+				}
+			}
+	printf("Double in ranges from 0.00001 to 100000.0 using RandomDoubleHP(range):\n");
+	ReportAverageOpsPerSecond(TEST_RANDOM_DOUBLE_HP, rng_mask, n_count);
+	}
 
 	exit(0);
 }
