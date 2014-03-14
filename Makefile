@@ -3,7 +3,7 @@
 include Makefile.conf
 
 LIBRARY_NAME = libsrerandom
-VERSION = 0.1
+VERSION = 0.1.1
 VERSION_MAJOR = 0
 
 # CFLAGS with optional tuning for CPU
@@ -27,7 +27,7 @@ LIBRARY_OBJECT = $(LIBRARY_NAME).so.$(VERSION)
 INSTALL_TARGET = install_shared
 LIBRARY_DEPENDENCY = $(SHARED_LIB_DIR)/$(LIBRARY_OBJECT)
 TEST_PROGRAM_LFLAGS = -lsrerandom
-CFLAGS_LIB = $(CFLAGS) -fPIC -fvisibility=hidden -DSRE_RANDOM_SHARED
+CFLAGS_LIB = $(CFLAGS) -fPIC -fvisibility=hidden -DSRE_RANDOM_SHARED -DSRE_RANDOM_SHARED_EXPORTS
 else
 ifeq ($(LIBRARY_CONFIGURATION), DEBUG)
 LIBRARY_OBJECT = $(LIBRARY_NAME)_dbg.a
@@ -35,7 +35,7 @@ else
 LIBRARY_OBJECT = $(LIBRARY_NAME).a
 endif
 # install_static also works for debugging library
-INSTALL_TARGET = install_static install_backend
+INSTALL_TARGET = install_static
 LIBRARY_DEPENDENCY = $(LIBRARY_OBJECT) $(BACKEND_OBJECT)
 TEST_PROGRAM_LFLAGS = $(LIBRARY_OBJECT)
 CFLAGS_LIB = $(CFLAGS)

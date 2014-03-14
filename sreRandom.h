@@ -230,12 +230,6 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #define SRE_RANDOM_INT_INCLUDE_EMPIRICAL_STRATEGY
 // #define SRE_RANDOM_INT_INCLUDE_REMAINDER_STRATEGY
 
-// The SRE_RANDOM_CACHE_NON_POWER_OF_TWO option enables caching the bit shift
-//  of non-powers-of-two when SRE_RANDOM_INT EMPIRICAL is enabled. It seems to
-// degrade performance instead of improving it.
-
-// #define SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-
 // Two strategies are provided for determining whether an integer range value
 // is power of two, and concurrently determining the highest order bit that
 // is set in any integer range value (effectively calculating the rounded log2
@@ -356,18 +350,14 @@ private :
 #endif
     // The last power of two, for which the shift has been cached.
     unsigned int last_power_of_two;
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
     // The last non-power of two, for which the shift has been cached.
-#endif
-    unsigned int last_non_power_of_two;
+    unsigned int last_general_range;
     // Number of bits in storage (0 to 31/63).
     unsigned char storage_size;
     // The bit shift corresponding to the last power of two (log2(n)).
     unsigned char last_power_of_two_shift;
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
     // The bit shift corresponding to the last non-power of two (log2(n - 1) + 1).
-    unsigned char last_non_power_of_two_shift;
-#endif
+    unsigned char last_general_range_shift;
 
     // Constructor and virtual functions.
 public :
@@ -388,18 +378,16 @@ private :
     inline int GetLastPowerOfTwoShift() const {
         return last_power_of_two_shift;
     }
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-    inline void SetLastNonPowerOfTwoData(unsigned int n, unsigned int shift) {
-        last_non_power_of_two = n;
-        last_non_power_of_two_shift = shift;
+    inline void SetLastGeneralRangeData(unsigned int n, unsigned int shift) {
+        last_general_range = n;
+        last_general_range_shift = shift;
     }
-    inline unsigned int GetLastNonPowerOfTwo() const {
-        return last_non_power_of_two;
+    inline unsigned int GetLastGeneralRange() const {
+        return last_general_range;
     }
-    inline int GetLastNonPowerOfTwoShift() const {
-        return last_non_power_of_two_shift;
+    inline int GetLastGeneralRangeShift() const {
+        return last_general_range_shift;
     }
-#endif
 
 #ifdef SRE_RANDOM_LOG2_LOOKUP_TABLE
     // The following lookup table functions do not actually belong in the
@@ -719,12 +707,6 @@ public :
             return RandomBits(shift);
         }
         unsigned int shift;
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-        if (n == GetLastNonPowerOfTwo()) {
-            shift = GetLastNonPowerOfTwoShift();
-        }
-        else
-#endif
         {
 #ifdef SRE_RANDOM_CALCULATE_LOG2
             shift = CalculateBitsNeeded(n);
@@ -735,9 +717,6 @@ public :
                 SetLastPowerOfTwoData(n, shift);
                 return RandomBits(shift);
             }
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-            SetLastNonPowerOfTwoData(n, shift);
-#endif
         }
         for (;;) {
             // Keep trying until the value is within the range.
@@ -752,12 +731,6 @@ public :
             return RandomBits(shift);
         }
         unsigned int shift;
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-        if (n == GetLastNonPowerOfTwo()) {
-            shift = GetLastNonPowerOfTwoShift();
-        }
-        else
-#endif
         {
 #ifdef SRE_RANDOM_CALCULATE_LOG2
             shift = CalculateBitsNeededMax256(n);
@@ -768,9 +741,6 @@ public :
                 SetLastPowerOfTwoData(n, shift);
                 return RandomBits(shift);
             }
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-            SetLastNonPowerOfTwoData(n, shift);
-#endif
         }
         for (;;) {
             // Keep trying until the value is within the range.
@@ -785,12 +755,6 @@ public :
             return RandomBits(shift);
         }
         unsigned int shift;
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-        if (n == GetLastNonPowerOfTwo()) {
-            shift = GetLastNonPowerOfTwoShift();
-        }
-        else
-#endif
         {
 #ifdef SRE_RANDOM_CALCULATE_LOG2
             shift = CalculateBitsNeededMax65536(n);
@@ -801,9 +765,6 @@ public :
                 SetLastPowerOfTwoData(n, shift);
                 return RandomBits(shift);
             }
-#ifdef SRE_RANDOM_CACHE_NON_POWER_OF_TWO
-            SetLastNonPowerOfTwoData(n, shift);
-#endif
         }
         for (;;) {
             // Keep trying until the value is within the range.
@@ -898,9 +859,36 @@ public :
        SetLastPowerOfTwoData(1 << shift, shift);
        return RandomBits(shift);
     }
-    // Repeat random integer function with the previously used power of two range.
+    // Repeat random integer function with the previously used power of two range
+    // (with any integer function).
     inline unsigned int RandomIntPowerOfTwoRepeat() {
         return RandomBits(GetLastPowerOfTwoShift());
+    }
+    // Prepare for power of two range so that it is cached, but do not return any
+    // random number yet.
+    inline void RandomIntPowerOfTwoPrepareForRepeat(unsigned int n) {
+        if (n == GetLastPowerOfTwo())
+		return;
+	int shift = CalculateLog2(n);
+        SetLastPowerOfTwoData(n, shift);
+    }
+    // Repeat random integer function with the general range previously set
+    // with RandomIntGeneralPrepareForRepeat().
+    inline unsigned int RandomIntGeneralRepeat() {
+        for (;;) {
+            // Keep trying until the value is within the range.
+            unsigned int r = RandomBits(GetLastGeneralRangeShift());
+            if (r < GetLastGeneralRange())
+                return r;
+        }
+    }
+    // Prepare for general range (either a power of two or not) so that it is cached,
+    // but do not return any random number yet.
+    inline void RandomIntGeneralPrepareForRepeat(unsigned int n) {
+        if (n == GetLastGeneralRange())
+            return;
+        int shift = CalculateBitsNeeded(n);
+        SetLastGeneralRangeData(n, shift);
     }
 
     // Floating point functions (all inline).
