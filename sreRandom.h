@@ -109,10 +109,6 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 //     Prepare for general range (either a power of two or not) so that it is cached,
 //     but do not return any random number yet. Only RandomIntGeneralRepeat() will use
 //     the cached information.
-// int CalculateLog2(int n)
-//     Efficiently calculate floor(log2(n)), valid for n >= 1.
-// int CalculatePowerOfTwoShift(int n)
-//     Efficiently calculate log2(n), returns - 1 if n is not a power of two.
 //
 // Floating point core functions:
 //
@@ -182,7 +178,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 //     traversing an initially ordered array. The statistical robustness of
 //     this function has not been verified.
 //    
-// More specialized functions for  testing of different strategies:
+// More specialized functions for testing of different strategies:
 //
 // unsigned int RandomIntEmpirical(unsigned int n)
 //     RandomInt() that will use the empirical strategy for ranges that are not
@@ -203,6 +199,13 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // sreCMWCRNG::sreCMWCRNG(int state_size)
 //     Constructor for the default complement-multiply-with-carry RNG
 //     using the specified state size.
+//
+// Non-class member functions:
+//
+// int sreCalculateLog2(int n)
+//     Efficiently calculate floor(log2(n)), valid for n >= 1.
+// int sreCalculatePowerOfTwoShift(int n)
+//     Efficiently calculate log2(n), returns - 1 if n is not a power of two.
 
 // Configuration.
 //
@@ -357,6 +360,114 @@ static void ValidateBitsNeeded(unsigned int n, unsigned int n_bits) {
 extern const unsigned char sre_internal_random_table[257] SRE_ALIGNED(256);
 #endif
 
+// The following size global (non-class member) functions efficiently calculate
+// log2 of an integer value, rounded down to an integer, as well as providing the
+// number of bits needed to store a certain range of integers.
+
+    // Calculate floor(log2(n))). For a power of two, this is equivalent to the
+    // number of bits needed to represent the range 0 to n - 1. For a non-power-of-two,
+    // the return value is one less than the number of bits needed to represent
+    // the range 0 to n - 1.
+    inline unsigned int sreCalculateLog2(unsigned int n) {
+        // Set shift to 16 if bits 15-31 are non-zero, zero otherwise.
+        unsigned int shift = (((n >> 16) + 0xFFFF) & 0x10000) >> 12;
+        unsigned int bits = n >> shift;
+        // Add 8 to shift if bits 8-15 of the highest non-zero half-word found previously
+        // are non-zero.
+        unsigned char byte_shift = (((bits >> 8) + 0xFF) & 0x100) >> 5;
+        shift += byte_shift;
+        bits >>= byte_shift;
+        // Add 4 to shift if bits 4-7 of the highest non-zero byte found previously
+        // are non-zero.
+        unsigned char nibble_shift = (((bits >> 4) + 0xF) & 0x10) >> 2;
+        shift += nibble_shift;
+        bits >>= nibble_shift;
+        // Add 2 to shift if bits 2-3 of the highest non-zero nibble found previously
+        // are non-zero.
+        unsigned char pair_shift = (((bits >> 2) + 0x3) & 0x4) >> 1;
+        shift += pair_shift;
+        bits >>= pair_shift;
+        // Add 1 to shift if bit 1 of the highest non-zero pair found previously
+        // is non-zero.
+        shift += bits >> 1;
+        return shift;
+    }
+
+    // Calculate number of bits needed for an integer range of n (log2(n - 1) + 1).
+    inline unsigned int sreCalculateBitsNeeded(unsigned int n) {
+        unsigned int shift = sreCalculateLog2(n);
+        // If n is not a power of two, one more bit is needed.
+        // Rely on the fact that bit 31 will be set when subtracting n from 2 ^ shift
+        // and n is not power of two.
+        shift += ((1 << shift) - n) >> 31;
+        VALIDATE_BITS_NEEDED(n, shift);
+	return shift;
+    }
+    // Calculate floor(log2(n)) when n is guaranteed to be <= 256, so that the
+    // return value will be <= 8. Undefined for n > 256.
+    inline unsigned int sreCalculateLog2Max256(unsigned int n) {
+        // Set shift to 4 if bits 4-7 of the highest non-zero byte found previously
+        // are non-zero.
+        unsigned int shift = (((n >> 4) + 0xF) & 0x10) >> 2;
+        unsigned int bits = n >> shift;
+        // Add 2 to shift if bits 2-3 of the highest non-zero nibble found previously
+        // are non-zero.
+        unsigned char pair_shift = (((bits >> 2) + 0x3) & 0x4) >> 1;
+        shift += pair_shift;
+        bits >>= pair_shift;
+        // Add 1 to shift if bit 1 of the highest non-zero pair found previously
+        // is non-zero.
+        shift += bits >> 1;
+        // When n = 2^16, set shift to 16 (shift will still be zero).
+        shift += (n & 0x10000) >> 12;
+        return shift;
+    }
+    // Calculate number of bits needed for an integer range of n (log2(n - 1) + 1),
+    // when n <= 256.
+    inline unsigned int sreCalculateBitsNeededMax256(unsigned int n) {
+        unsigned int shift = sreCalculateLog2Max256(n);
+        // If n is not a power of two, one more bit is needed.
+        // Rely on the fact that bit 31 will be set when subtracting n from 2 ^ shift
+        // and n is not power of two.
+        shift += ((1 << shift) - n) >> 31;
+        VALIDATE_BITS_NEEDED(n, shift);
+	return shift;
+    }
+    // Calculate floor(log2(n)) when n is guaranteed to be <= 2^16, so that the
+    // return value will be <= 16. Undefined for n > 2^16.
+    inline unsigned int sreCalculateLog2Max65536(unsigned int n) {
+        // Set shift to 8 if bits 7-15 are non-zero.
+        unsigned int shift = (((n >> 8) + 0xFF) & 0x100) >> 5;
+        unsigned bits = n >> shift;
+        // Add 4 to shift if bits 4-7 of the highest non-zero byte found previously
+        // are non-zero.
+        unsigned char nibble_shift = (((bits >> 4) + 0xF) & 0x10) >> 2;
+        shift += nibble_shift;
+        bits >>= nibble_shift;
+        // Add 2 to shift if bits 2-3 of the highest non-zero nibble found previously
+        // are non-zero.
+        unsigned char pair_shift = (((bits >> 2) + 0x3) & 0x4) >> 1;
+        shift += pair_shift;
+        bits >>= pair_shift;
+        // Add 1 to shift if bit 1 of the highest non-zero pair found previously
+        // is non-zero.
+        shift += bits >> 1;
+        // When n = 256, set shift to 8 (shift will still be zero).
+        shift += (n & 0x100) >> 5;
+        return shift;
+    }
+    // Calculate number of bits needed for an integer range of n (log2(n - 1) + 1),
+    // when n <= 65536.
+    inline unsigned int sreCalculateBitsNeededMax65536(unsigned int n) {
+        unsigned int shift = sreCalculateLog2Max65536(n);
+        // If n is not a power of two, one more bit is needed.
+        // Rely on the fact that bit 31 will be set when subtracting n from 2 ^ shift
+        // and n is not power of two.
+        shift += ((1 << shift) - n) >> 31;
+        VALIDATE_BITS_NEEDED(n, shift);
+	return shift;
+    }
+
 class SRE_RANDOM_API  SRE_PACKED sreRNG {
 private :
 #if SRE_STORAGE_SIZE == 64
@@ -480,110 +591,8 @@ private :
     unsigned int GetBitsNeededLookupTableMax65536(unsigned int n);
 #endif
 #ifdef SRE_RANDOM_CALCULATE_LOG2
-public :
-    // Calculate floor(log2(n))). For a power of two, this is equivalent to the
-    // number of bits needed to represent the range 0 to n - 1. For a non-power-of-two,
-    // the return value is one less than the number of bits needed to represent
-    // the range 0 to n - 1.
-    inline unsigned int CalculateLog2(unsigned int n) const {
-        // Set shift to 16 if bits 15-31 are non-zero, zero otherwise.
-        unsigned int shift = (((n >> 16) + 0xFFFF) & 0x10000) >> 12;
-        unsigned int bits = n >> shift;
-        // Add 8 to shift if bits 8-15 of the highest non-zero half-word found previously
-        // are non-zero.
-        unsigned char byte_shift = (((bits >> 8) + 0xFF) & 0x100) >> 5;
-        shift += byte_shift;
-        bits >>= byte_shift;
-        // Add 4 to shift if bits 4-7 of the highest non-zero byte found previously
-        // are non-zero.
-        unsigned char nibble_shift = (((bits >> 4) + 0xF) & 0x10) >> 2;
-        shift += nibble_shift;
-        bits >>= nibble_shift;
-        // Add 2 to shift if bits 2-3 of the highest non-zero nibble found previously
-        // are non-zero.
-        unsigned char pair_shift = (((bits >> 2) + 0x3) & 0x4) >> 1;
-        shift += pair_shift;
-        bits >>= pair_shift;
-        // Add 1 to shift if bit 1 of the highest non-zero pair found previously
-        // is non-zero.
-        shift += bits >> 1;
-        return shift;
-    }
-private :
-    // Calculate number of bits needed for an integer range of n (log2(n - 1) + 1).
-    inline unsigned int CalculateBitsNeeded(unsigned int n) const {
-        unsigned int shift = CalculateLog2(n);
-        // If n is not a power of two, one more bit is needed.
-        // Rely on the fact that bit 31 will be set when subtracting n from 2 ^ shift
-        // and n is not power of two.
-        shift += ((1 << shift) - n) >> 31;
-        VALIDATE_BITS_NEEDED(n, shift);
-	return shift;
-    }
-    // Calculate floor(log2(n)) when n is guaranteed to be <= 256, so that the
-    // return value will be <= 8. Undefined for n > 256.
-    inline unsigned int CalculateLog2Max256(unsigned int n) const {
-        // Set shift to 4 if bits 4-7 of the highest non-zero byte found previously
-        // are non-zero.
-        unsigned int shift = (((n >> 4) + 0xF) & 0x10) >> 2;
-        unsigned int bits = n >> shift;
-        // Add 2 to shift if bits 2-3 of the highest non-zero nibble found previously
-        // are non-zero.
-        unsigned char pair_shift = (((bits >> 2) + 0x3) & 0x4) >> 1;
-        shift += pair_shift;
-        bits >>= pair_shift;
-        // Add 1 to shift if bit 1 of the highest non-zero pair found previously
-        // is non-zero.
-        shift += bits >> 1;
-        // When n = 2^16, set shift to 16 (shift will still be zero).
-        shift += (n & 0x10000) >> 12;
-        return shift;
-    }
-    // Calculate number of bits needed for an integer range of n (log2(n - 1) + 1),
-    // when n <= 256.
-    inline unsigned int CalculateBitsNeededMax256(unsigned int n) const {
-        unsigned int shift = CalculateLog2Max256(n);
-        // If n is not a power of two, one more bit is needed.
-        // Rely on the fact that bit 31 will be set when subtracting n from 2 ^ shift
-        // and n is not power of two.
-        shift += ((1 << shift) - n) >> 31;
-        VALIDATE_BITS_NEEDED(n, shift);
-	return shift;
-    }
-    // Calculate floor(log2(n)) when n is guaranteed to be <= 2^16, so that the
-    // return value will be <= 16. Undefined for n > 2^16.
-    inline unsigned int CalculateLog2Max65536(unsigned int n) const {
-        // Set shift to 8 if bits 7-15 are non-zero.
-        unsigned int shift = (((n >> 8) + 0xFF) & 0x100) >> 5;
-        unsigned bits = n >> shift;
-        // Add 4 to shift if bits 4-7 of the highest non-zero byte found previously
-        // are non-zero.
-        unsigned char nibble_shift = (((bits >> 4) + 0xF) & 0x10) >> 2;
-        shift += nibble_shift;
-        bits >>= nibble_shift;
-        // Add 2 to shift if bits 2-3 of the highest non-zero nibble found previously
-        // are non-zero.
-        unsigned char pair_shift = (((bits >> 2) + 0x3) & 0x4) >> 1;
-        shift += pair_shift;
-        bits >>= pair_shift;
-        // Add 1 to shift if bit 1 of the highest non-zero pair found previously
-        // is non-zero.
-        shift += bits >> 1;
-        // When n = 256, set shift to 8 (shift will still be zero).
-        shift += (n & 0x100) >> 5;
-        return shift;
-    }
-    // Calculate number of bits needed for an integer range of n (log2(n - 1) + 1),
-    // when n <= 65536.
-    inline unsigned int CalculateBitsNeededMax65536(unsigned int n) const {
-        unsigned int shift = CalculateLog2Max65536(n);
-        // If n is not a power of two, one more bit is needed.
-        // Rely on the fact that bit 31 will be set when subtracting n from 2 ^ shift
-        // and n is not power of two.
-        shift += ((1 << shift) - n) >> 31;
-        VALIDATE_BITS_NEEDED(n, shift);
-	return shift;
-    }
+    // The log2/bits needed calculation function have already been defined above as
+    // global, non-class member functions.
 #endif
 
     // Helper functions.
@@ -622,7 +631,7 @@ private :
         return (unsigned short)RandomBits(shift + 9) % (unsigned char)n;
 #else
         // SRE_RANDOM_CALCULATE_LOG2 is defined.
-        unsigned int shift = CalculateBitsNeededMax256(n);
+        unsigned int shift = sreCalculateBitsNeededMax256(n);
         // Detects powers of two.
         if (n == ((unsigned int)1 << shift)) {
             SetLastPowerOfTwoData(n, shift);
@@ -688,7 +697,7 @@ public :
         unsigned int shift;
         {
 #ifdef SRE_RANDOM_CALCULATE_LOG2
-            shift = CalculateBitsNeeded(n);
+            shift = sreCalculateBitsNeeded(n);
 #else   // SRE_RANDOM_LOG2_LOOKUP_TABLE
             shift = GetBitsNeededLookupTable(n);
 #endif
@@ -712,7 +721,7 @@ public :
         unsigned int shift;
         {
 #ifdef SRE_RANDOM_CALCULATE_LOG2
-            shift = CalculateBitsNeededMax256(n);
+            shift = sreCalculateBitsNeededMax256(n);
 #else   // SRE_RANDOM_LOG2_LOOKUP_TABLE
             shift = GetBitsNeededLookupTable(n);
 #endif
@@ -736,7 +745,7 @@ public :
         unsigned int shift;
         {
 #ifdef SRE_RANDOM_CALCULATE_LOG2
-            shift = CalculateBitsNeededMax65536(n);
+            shift = sreCalculateBitsNeededMax65536(n);
 #else   // SRE_RANDOM_LOG2_LOOKUP_TABLE
             shift = GetBitsNeededLookupTable(n);
 #endif
@@ -796,7 +805,7 @@ public :
         SetLastPowerOfTwoData(n, shift);
 #else
         // Use the calculation method.
-        unsigned int shift = CalculateLog2Max256(n);
+        unsigned int shift = sreCalculateLog2Max256(n);
 #endif
         return RandomBits(shift);
     }
@@ -812,7 +821,7 @@ public :
         SetLastPowerOfTwoData(n, shift);
 #else
         // Use the calculation method.
-        unsigned int shift = CalculateLog2Max65536(n);
+        unsigned int shift = sreCalculateLog2Max65536(n);
 #endif
         return RandomBits(shift);
     }
@@ -826,7 +835,7 @@ public :
         shift = GetBitsNeededLookupTable(n);
 #else
         // Use the calculation method.
-        shift = CalculateLog2(n);
+        shift = sreCalculateLog2(n);
 #endif
         SetLastPowerOfTwoData(n, shift);
         return RandomBits(shift);
@@ -848,7 +857,7 @@ public :
     inline void RandomIntPowerOfTwoPrepareForRepeat(unsigned int n) {
         if (n == GetLastPowerOfTwo())
 		return;
-	int shift = CalculateLog2(n);
+	int shift = sreCalculateLog2(n);
         SetLastPowerOfTwoData(n, shift);
     }
     // Repeat random integer function with the general range previously set
@@ -866,12 +875,12 @@ public :
     inline void RandomIntGeneralPrepareForRepeat(unsigned int n) {
         if (n == GetLastGeneralRange())
             return;
-        int shift = CalculateBitsNeeded(n);
+        int shift = sreCalculateBitsNeeded(n);
         SetLastGeneralRangeData(n, shift);
     }
     // Efficiently calculate log2(n), returns - 1 if n is not a power of two.
     inline int CalculatePowerOfTwoShift(unsigned int n) {
-	unsigned int shift = CalculateLog2(n);
+	unsigned int shift = sreCalculateLog2(n);
 	if (((unsigned int)1 << shift) == n)
 		return shift;
 	return - 1;

@@ -3,7 +3,7 @@
 include Makefile.conf
 
 LIBRARY_NAME = libsrerandom
-VERSION = 0.1.2
+VERSION = 0.2
 VERSION_MAJOR = 0
 
 # CFLAGS with optional tuning for CPU
